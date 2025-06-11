@@ -1,41 +1,38 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
-	"strings"
-)
-
-// Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
-var _ = net.Listen
-var _ = os.Exit
-
-const (
-	PING = "PING"
 )
 
 func handleConnection(c net.Conn) {
-	reader := bufio.NewReader(c)
+	defer c.Close()
+	
+	buffer := make([]byte, 512)
 
 	for {
-		line, err := reader.ReadString('\n')
+		bytesRead, err := c.Read(buffer)
 
 		if errors.Is(err, io.EOF) {
 			fmt.Println("client closed the connection")
-			break
+			return
 		}
 
 		if err != nil {
-			log.Fatal(err)
+			fmt.Fprint(os.Stderr, err)
+			return
 		}
 
-		if strings.TrimSpace(line) == PING {
-			c.Write([]byte("+PONG\r\n"))
+		if bytesRead == 0 {
+			continue
+		}
+
+		if err := handleRequest(c, buffer[0:bytesRead]); err != nil {
+			fmt.Fprint(os.Stderr, err)
+			return
 		}
 	}
 }
