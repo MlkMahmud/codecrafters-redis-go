@@ -1,166 +1,146 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 )
 
 const (
-	arrayDelim      = '*'
-	bulkStringDelim = '$'
-	errorDelim      = '-'
-	integerDelim    = ':'
-	stringDelim     = '+'
+	arrayPrefix        = '*'
+	bulkStringPrefix   = '$'
+	errorPrefix        = '-'
+	simpleStringPrefix = '+'
 )
 
-var (
-	errEmptyInput             = errors.New("input is empty")
-	errInvalidBulkStringDelim = errors.New("bulk string delimiter is invalid")
-	errInvalidStringDelim     = errors.New("string delimiter is invalid")
-)
+func parseRespData(r *bufio.Reader) (any, error) {
+	delim, err := r.Peek(1)
 
-func parse(input []byte) ([][]byte, error) {
-	delimiter := []byte("\r\n")
-	parts := [][]byte{}
-
-	for part := range bytes.SplitSeq(input, delimiter) {
-		if bytes.Equal(bytes.TrimSpace(part), []byte("")) {
-			continue
-		}
-
-		parts = append(parts, part)
+	if errors.Is(err, io.EOF) {
+		return nil, io.EOF
 	}
 
-	if len(parts) == 0 {
-		return nil, errEmptyInput
+	if err != nil {
+		return nil, fmt.Errorf("failed to peek data type from buffer: %w", err)
 	}
 
-	firstByte := parts[0][0]
+	prefix := delim[0]
 
-	switch firstByte {
-	case arrayDelim:
-		return parseArray(parts)
+	switch prefix {
+	case arrayPrefix:
+		return parseArray(r)
 
-	case bulkStringDelim:
-		return parseBulkString(parts)
+	case bulkStringPrefix:
+		return parseBulkString(r)
 
-	case errorDelim:
-		return parseError(parts)
-
-	case integerDelim:
-		return parseInteger(parts)
-
-	case stringDelim:
-		return parseString(parts)
+	case simpleStringPrefix:
+		return parseSimpleString(r)
 
 	default:
-		return nil, fmt.Errorf("input first byte \"%c\" is invalid", firstByte)
+		return nil, fmt.Errorf("unsupported data type \"%c\"", prefix)
 	}
 }
 
-// todo: refactor (make func recursive)
-func parseArray(parts [][]byte) ([][]byte, error) {
-	if len(parts) < 1 {
-		return nil, fmt.Errorf("array string length is too short")
+func parseArray(r *bufio.Reader) ([]any, error) {
+	lengthLine, err := r.ReadBytes(10)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to read array length from buffer: %w", err)
 	}
 
-	lengthPrefix := parts[0]
+	lengthLine = bytes.TrimRight(lengthLine, "\r\n")
 
-	if delim := lengthPrefix[0]; delim != arrayDelim {
-		return nil, fmt.Errorf("array string delimiter is invalid. expected \"%c\", got \"%c\"", arrayDelim, delim)
+	if len(lengthLine) == 0 || lengthLine[0] != arrayPrefix {
+		return nil, fmt.Errorf("malformed array - array must begin with \"%c\" prefix", arrayPrefix)
 	}
 
-	_, err := strconv.Atoi(string(lengthPrefix[1:]))
+	if len(lengthLine) < 2 {
+		return nil, fmt.Errorf("malformed array - expected content after \"%c\" prefix", arrayPrefix)
+	}
+
+	length, err := strconv.Atoi(string(lengthLine[1:]))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse array length: %w", err)
 	}
 
-	entries := [][]byte{}
-	entryIndex := 0
+	arr := make([]any, length)
 
-	for i, subParts := 0, parts[1:]; i < len(subParts); {
-		firstByte := subParts[i][0]
+	for i := range length {
+		data, err := parseRespData(r)
 
-		switch firstByte {
-		case bulkStringDelim:
-			entry, err := parseBulkString(subParts[i:])
-
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse list item at entry \"%d\": %w", entryIndex, err)
-			}
-
-			entries = append(entries, entry...)
-			entryIndex++
-			i += 2
-
-		case stringDelim:
-			entry, err := parseString(subParts[i:])
-
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse list item at entry \"%d\": %w", entryIndex, err)
-			}
-
-			entries = append(entries, entry...)
-			entryIndex++
-			i += 1
-
-		default:
-			return nil, fmt.Errorf("failed to parse list item: invalid delim \"%c\" at entry: %d", firstByte, entryIndex)
+		if err != nil {
+			return nil, fmt.Errorf("malformed array - failed to entry at index %d: %w", i, err)
 		}
+
+		arr[i] = data
 	}
 
-	return entries, nil
+	return arr, nil
 }
 
-func parseBulkString(parts [][]byte) ([][]byte, error) {
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("bulk string length is too short")
-	}
-
-	if delim := parts[0][0]; delim != bulkStringDelim {
-		return nil, fmt.Errorf("bulk string delimiter is invalid. expected \"%c\", got \"%c\"", bulkStringDelim, delim)
-	}
-
-	lengthPrefix := parts[0]
-	str := parts[1]
-
-	// convert everything after the "$" delim to an integer
-	length, err := strconv.Atoi(string(lengthPrefix[1:]))
+func parseBulkString(r *bufio.Reader) ([]byte, error) {
+	lengthLine, err := r.ReadBytes('\n')
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse bulk integer string length: %w", err)
+		return nil, fmt.Errorf("failed to read bulk string length: %w", err)
+	}
+
+	lengthLine = bytes.TrimRight(lengthLine, "\r\n")
+
+	if len(lengthLine) < 2 {
+		return nil, fmt.Errorf("malformed bulk string - length prefix \"%s\" is invalid", lengthLine)
+	}
+
+	if prefix := lengthLine[0]; prefix != bulkStringPrefix {
+		return nil, fmt.Errorf("bulk strings must begin with a \"%c\" prefix not \"%c\"", bulkStringPrefix, prefix)
+	}
+
+	length, err := strconv.Atoi((string(lengthLine[1:])))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse bulk string length: %w", err)
 	}
 
 	if length == 0 {
-		return [][]byte{}, nil
+		return []byte(""), nil
 	}
 
-	if strLen := len(str); strLen != length {
-		return nil, fmt.Errorf("actual string length \"%d\" does not match expected length \"%d\"", strLen, length)
+	dataLine, err := r.ReadBytes('\n')
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to read bulk string data from buffer: %w", err)
 	}
 
-	return [][]byte{str}, nil
+	dataLine = bytes.TrimRight(dataLine, "\r\n")
+
+	if strLength := len(dataLine); strLength != length {
+		return nil, fmt.Errorf("bulk string length %d does not match expected length: %d", strLength, length)
+	}
+
+	return dataLine, nil
 }
 
-func parseError(_ [][]byte) ([][]byte, error) {
-	return nil, nil
-}
+func parseSimpleString(r *bufio.Reader) ([]byte, error) {
+	dataLine, err := r.ReadBytes('\n')
 
-func parseInteger(_ [][]byte) ([][]byte, error) {
-	return nil, nil
-}
-
-func parseString(parts [][]byte) ([][]byte, error) {
-	if len(parts) < 1 {
-		return nil, fmt.Errorf("string length is too short")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read simple string from buffer")
 	}
 
-	if parts[0][0] != stringDelim {
-		return nil, errInvalidStringDelim
+	dataLine = bytes.TrimRight(dataLine, "\r\n")
+	dataLineLength := len(dataLine)
+
+	if dataLineLength == 0 || dataLine[0] != simpleStringPrefix {
+		return nil, fmt.Errorf("malformed simple string - string must begin with \"%c\" prefix", simpleStringPrefix)
 	}
 
-	return [][]byte{parts[0][1:]}, nil
+	if dataLineLength < 2 {
+		return nil, fmt.Errorf("malformed simple string - expected content after \"%c\" prefix", simpleStringPrefix)
+	}
+
+	return dataLine[1:], nil
 }
