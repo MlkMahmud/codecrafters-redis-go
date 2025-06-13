@@ -13,6 +13,10 @@ import (
 	"syscall"
 )
 
+var (
+	st = newStore()
+)
+
 func handleIncomingConnection(c net.Conn, ctx context.Context) {
 	defer c.Close()
 	reader := bufio.NewReader(c)
@@ -25,7 +29,7 @@ func handleIncomingConnection(c net.Conn, ctx context.Context) {
 			return
 
 		default:
-			if  errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) {
 				return
 			}
 
@@ -55,6 +59,8 @@ func main() {
 	fmt.Println("Listening on port: 6379")
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
+	go st.init()
+
 	go func() {
 		for {
 			conn, err := listener.Accept()
@@ -77,6 +83,7 @@ func main() {
 	fmt.Println("shutting down...")
 
 	cancelFunc()
+	st.shutdown()
 	listener.Close()
 
 	os.Exit(0)

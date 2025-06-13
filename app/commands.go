@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strconv"
+	"time"
 )
 
 var (
@@ -13,83 +15,19 @@ var (
 	SET  = []byte("SET")
 )
 
-var (
-	st = newStore()
-)
-
-func executeCommand(c net.Conn, command []byte, argv []any) (int, error) {
+func executeCommand(c net.Conn, command []byte, args []any) (int, error) {
 	switch {
 	case bytes.Equal(command, PING):
-		{
-			if err := handlePingCommand(c); err != nil {
-				return 0, err
-			}
-
-			return 1, nil
-		}
+		return handlePingCommand(c)
 
 	case bytes.Equal(command, ECHO):
-		{
-			args, err := getNArgs(1, argv)
-
-			if err != nil {
-				return 0, fmt.Errorf("\"ECHO\" command error: %w", err)
-			}
-
-			arg, ok := args[0].([]byte)
-
-			if !ok {
-				return 0, fmt.Errorf("ECHO argument must be a bulk string, got %T", args[0])
-			}
-
-			if err := handleEchoCommand(c, arg); err != nil {
-				return 0, err
-			}
-
-			return 2, nil
-		}
+		return handleEchoCommand(c, args)
 
 	case bytes.Equal(command, GET):
-		{
-			args, err := getNArgs(1, argv)
-
-			if err != nil {
-				return 0, fmt.Errorf("\"GET\" command error: %w", err)
-			}
-
-			key, ok := args[0].([]byte)
-
-			if !ok {
-				return 0, fmt.Errorf("GET argument must be a bulk string, got %T", args[0])
-			}
-
-			if err := handleGetCommand(c, key); err != nil {
-				return 0, err
-			}
-
-			return 2, nil
-		}
+		return handleGetCommand(c, args)
 
 	case bytes.Equal(command, SET):
-		{
-			args, err := getNArgs(2, argv)
-
-			if err != nil {
-				return 0, fmt.Errorf("\"SET\" command error: %w", err)
-			}
-
-			key, ok := args[0].([]byte)
-
-			if !ok {
-				return 0, fmt.Errorf("SET argument must be a bulk string, got %T", args[0])
-			}
-
-			if err := handleSetCommand(c, key, args[1]); err != nil {
-				return 0, err
-			}
-
-			return 3, nil
-		}
+		return handleSetCommand(c, args)
 
 	default:
 		return 0, fmt.Errorf("unsupported command \"%s\"", command)
@@ -113,6 +51,7 @@ func handleCommands(c net.Conn, data any) error {
 					return err
 				}
 
+				i += 1 // add one for the command
 				i += argsConsumed
 
 			default:
@@ -133,13 +72,33 @@ func handleCommands(c net.Conn, data any) error {
 	return nil
 }
 
-func handleEchoCommand(c net.Conn, arg []byte) error {
+func handleEchoCommand(c net.Conn, args []any) (int, error) {
+	if len(args) < 1 {
+		return 0, fmt.Errorf("\"ECHO\" command requires at least 1 argument")
+	}
+
+	arg, ok := args[0].([]byte)
+
+	if !ok {
+		return 0, fmt.Errorf("\"ECHO\" command argument must be a string argument")
+	}
+
 	response := generateBulkString(string(arg))
 	_, err := c.Write(response)
-	return err
+	return 1, err
 }
 
-func handleGetCommand(c net.Conn, key []byte) error {
+func handleGetCommand(c net.Conn, args []any) (int, error) {
+	if len(args) < 1 {
+		return 0, fmt.Errorf("\"GET\" command requires at least 1 argument")
+	}
+
+	key, ok := args[0].([]byte)
+
+	if !ok {
+		return 0, fmt.Errorf("\"GET\" command argument must be a string")
+	}
+
 	item := st.getItem(string(key))
 	var response []byte
 
@@ -148,25 +107,80 @@ func handleGetCommand(c net.Conn, key []byte) error {
 		response = generateBulkString(string(v))
 
 	case nil:
-		response = generateBulkString("-1")
+		response = generateNullString()
 
 	default:
-		return fmt.Errorf("unsupported data type")
+		return 1, fmt.Errorf("unsupported data type")
 	}
 
 	_, err := c.Write(response)
-	return err
+	return 1, err
 }
 
-func handlePingCommand(c net.Conn) error {
+func handlePingCommand(c net.Conn) (int, error) {
 	response := generateSimpleString("PONG")
 	_, err := c.Write(response)
-	return err
+	return 0, err
 }
 
-func handleSetCommand(c net.Conn, key []byte, value any) error {
-	st.setItem(string(key), value)
+func handleSetCommand(c net.Conn, args []any) (int, error) {
+	argsLen := len(args)
+	argsConsumed := 0
+
+	if argsLen < 2 {
+		return argsConsumed, fmt.Errorf("\"SET\" command requires at least 2 arguments")
+	}
+
+	key, ok := args[0].([]byte)
+
+	if !ok {
+		return argsConsumed, fmt.Errorf("\"SET\" command argument must be a string")
+	}
+
+	value := args[1]
+	var expiry time.Time
+
+	if argsLen < 3 {
+		argsConsumed = 2
+		expiry = time.Time{}
+	} else {
+		switch v := args[2].(type) {
+		case []byte:
+			if bytes.Equal(bytes.ToUpper(v), []byte("PX")) {
+				argsConsumed = 3
+
+				if argsLen < 4 {
+					return argsConsumed, fmt.Errorf("\"SET\" command with \"PX\" option requires an expiry value")
+				}
+
+				var duration time.Duration
+				argsConsumed = 4
+
+				switch px := args[3].(type) {
+				case int:
+					duration = time.Duration(px) * time.Millisecond
+
+				case []byte:
+					d, err := strconv.Atoi(string(px))
+
+					if err != nil {
+						return argsConsumed, fmt.Errorf("\"SET\" command \"PX\" options requires an integer expiry value")
+					}
+
+					duration = time.Duration(d) * time.Millisecond
+
+				default:
+					return argsConsumed, fmt.Errorf("\"SET\" command \"PX\" options requires an integer expiry value")
+				}
+
+				expiry = time.Now().Add(duration)
+			}
+		}
+	}
+
+	st.setItem(string(key), value, expiry)
 	response := generateSimpleString("OK")
+
 	_, err := c.Write(response)
-	return err
+	return argsConsumed, err
 }

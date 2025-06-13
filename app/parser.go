@@ -13,6 +13,7 @@ const (
 	arrayPrefix        = '*'
 	bulkStringPrefix   = '$'
 	errorPrefix        = '-'
+	integerPrefix      = ':'
 	simpleStringPrefix = '+'
 )
 
@@ -35,6 +36,9 @@ func parseRespData(r *bufio.Reader) (any, error) {
 
 	case bulkStringPrefix:
 		return parseBulkString(r)
+
+	// case integerPrefix:
+	// 	return parseInteger(r)
 
 	case simpleStringPrefix:
 		return parseSimpleString(r)
@@ -122,6 +126,33 @@ func parseBulkString(r *bufio.Reader) ([]byte, error) {
 	}
 
 	return dataLine, nil
+}
+
+func parseInteger(r *bufio.Reader) (int, error) {
+	dataLine, err := r.ReadBytes('\n')
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to read integer from buffer")
+	}
+
+	dataLine = bytes.TrimRight(dataLine, "\r\n")
+	dataLineLength := len(dataLine)
+
+	if dataLineLength == 0 || dataLine[0] != integerPrefix {
+		return 0, fmt.Errorf("malformed integer - integer must begin with \"%c\" prefix", integerPrefix)
+	}
+
+	if dataLineLength < 2 {
+		return 0, fmt.Errorf("malformed integer - expected content after \"%c\" prefix", integerPrefix)
+	}
+
+	num, err := strconv.Atoi(string(dataLine[1:]))
+
+	if err != nil {
+		return 0, fmt.Errorf("malformed integer value: %w", err)
+	}
+
+	return num, nil
 }
 
 func parseSimpleString(r *bufio.Reader) ([]byte, error) {
