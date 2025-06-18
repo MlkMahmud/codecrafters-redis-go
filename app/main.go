@@ -36,13 +36,21 @@ func handleIncomingConnection(c net.Conn, ctx context.Context) {
 				return
 			}
 
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to parse input: %v", err)
+			if errors.Is(err, errSyntax) {
+				errorMessage := generateErrorString("ERR", err.Error())
+				c.Write(errorMessage)
 				return
 			}
 
-			if err := handleCommands(c, data); err != nil {
-				fmt.Fprint(os.Stderr, err)
+			if err != nil {
+				errorMessage := generateErrorString("ERR", "unexpected server error")
+				c.Write(errorMessage)
+				return
+			}
+
+			if err := handleCommands(c, data); err != nil && !errors.Is(err, errInternal) {
+				errorMessage := generateErrorString("ERR", err.Error())
+				c.Write(errorMessage)
 				return
 			}
 		}

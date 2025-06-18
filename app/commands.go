@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"time"
 )
@@ -84,8 +85,13 @@ func handleEchoCommand(c net.Conn, args []any) (int, error) {
 	}
 
 	response := generateBulkString(string(arg))
-	_, err := c.Write(response)
-	return 1, err
+
+	if _, err := c.Write(response); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		return 1, errInternal
+	}
+
+	return 1, nil
 }
 
 func handleGetCommand(c net.Conn, args []any) (int, error) {
@@ -113,14 +119,22 @@ func handleGetCommand(c net.Conn, args []any) (int, error) {
 		return 1, fmt.Errorf("unsupported data type")
 	}
 
-	_, err := c.Write(response)
-	return 1, err
+	if _, err := c.Write(response); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		return 1, errInternal
+	}
+
+	return 1, nil
 }
 
 func handlePingCommand(c net.Conn) (int, error) {
 	response := generateSimpleString("PONG")
-	_, err := c.Write(response)
-	return 0, err
+	if _, err := c.Write(response); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		return 0, errInternal
+	}
+
+	return 0, nil
 }
 
 func handleSetCommand(c net.Conn, args []any) (int, error) {
@@ -181,6 +195,10 @@ func handleSetCommand(c net.Conn, args []any) (int, error) {
 	st.setItem(string(key), value, expiry)
 	response := generateSimpleString("OK")
 
-	_, err := c.Write(response)
-	return argsConsumed, err
+	if _, err := c.Write(response); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		return argsConsumed, errInternal
+	}
+
+	return argsConsumed, nil
 }
