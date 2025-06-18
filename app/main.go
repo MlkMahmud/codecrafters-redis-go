@@ -11,10 +11,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/urfave/cli/v2"
 )
 
 var (
-	st = newStore()
+	config map[string]string
+	st     *store
 )
 
 func handleIncomingConnection(c net.Conn, ctx context.Context) {
@@ -47,44 +50,70 @@ func handleIncomingConnection(c net.Conn, ctx context.Context) {
 }
 
 func main() {
-	doneC := make(chan os.Signal, 1)
-	signal.Notify(doneC, syscall.SIGTERM, syscall.SIGINT)
+	app := &cli.App{
+		Name: "Redis",
+		Action: func(ctx *cli.Context) error {
+			config = map[string]string{
+				"dir":        ctx.String("dir"),
+				"dbfilename": ctx.String("dbfilename"),
+			}
 
-	listener, err := net.Listen("tcp", "0.0.0.0:6379")
+			doneC := make(chan os.Signal, 1)
+			signal.Notify(doneC, syscall.SIGTERM, syscall.SIGINT)
 
-	if err != nil {
-		log.Fatal(err)
+			listener, err := net.Listen("tcp", "0.0.0.0:6379")
+
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("Listening on port: 6379")
+			ct, cancelFunc := context.WithCancel(context.Background())
+			st = newStore()
+
+			go st.init()
+
+			go func() {
+				for {
+					conn, err := listener.Accept()
+
+					select {
+					case <-ctx.Done():
+						return
+
+					default:
+						if err != nil {
+							log.Println(err)
+							return
+						}
+
+						go handleIncomingConnection(conn, ct)
+					}
+				}
+			}()
+
+			<-doneC
+			fmt.Println("shutting down...")
+
+			cancelFunc()
+			st.shutdown()
+			listener.Close()
+
+			return nil
+		},
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "dir",
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "dbfilename",
+				Required: false,
+			},
+		},
 	}
 
-	fmt.Println("Listening on port: 6379")
-	ctx, cancelFunc := context.WithCancel(context.Background())
-
-	go st.init()
-
-	go func() {
-		for {
-			conn, err := listener.Accept()
-
-			select {
-			case <-ctx.Done():
-				return
-
-			default:
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				go handleIncomingConnection(conn, ctx)
-			}
-		}
-	}()
-
-	<-doneC
-	fmt.Println("shutting down...")
-
-	cancelFunc()
-	st.shutdown()
-	listener.Close()
-
-	os.Exit(0)
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
 }

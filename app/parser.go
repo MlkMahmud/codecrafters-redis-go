@@ -37,8 +37,8 @@ func parseRespData(r *bufio.Reader) (any, error) {
 	case bulkStringPrefix:
 		return parseBulkString(r)
 
-	// case integerPrefix:
-	// 	return parseInteger(r)
+	case integerPrefix:
+		return parseInteger(r)
 
 	case simpleStringPrefix:
 		return parseSimpleString(r)
