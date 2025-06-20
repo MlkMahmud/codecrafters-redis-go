@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/codecrafters-io/redis-starter-go/app/cache"
 	"github.com/codecrafters-io/redis-starter-go/app/server"
 	"github.com/urfave/cli/v2"
 )
@@ -51,15 +50,15 @@ func main() {
 		Name: "Redis",
 		Action: func(ctx *cli.Context) error {
 			server := server.NewServer(server.ServerConfig{
-				CacheConfig: cache.CacheConfig{HZ: ctx.Int("hz")},
-				Host:        ctx.String("host"),
-				Port:        ctx.Int("port"),
+				Host: ctx.String("host"),
+				HZ:   ctx.Int("hz"),
+				Port: ctx.Int("port"),
 			})
 
 			server.SetConfigProperty("dir", ctx.String("dir"))
 			server.SetConfigProperty("dbfilename", ctx.String("dbfilename"))
 
-			if err := server.Run(); err != nil {
+			if err := server.Start(); err != nil {
 				return err
 			}
 

@@ -11,29 +11,18 @@ type item struct {
 }
 
 type Cache struct {
-	hz              int
-	items           map[string]item
-	mu              sync.Mutex
-	cleanerStoppedC chan struct{}
+	items map[string]item
+	mu    sync.Mutex
 }
 
-type CacheConfig struct {
-	// Controls the frequency (in milliseconds) at which the cache performs background tasks like expiring keys.
-	HZ int
-}
-
-func NewCache(cfg CacheConfig) *Cache {
-	var hz = cfg.HZ
-
-	if hz == 0 {
-		hz = 5000
-	}
-
+func NewCache() *Cache {
 	return &Cache{
-		hz:              hz,
-		items:           map[string]item{},
-		cleanerStoppedC: make(chan struct{}, 1),
+		items: map[string]item{},
 	}
+}
+
+func (i *item) GetTTL() time.Time {
+	return i.expiry
 }
 
 func (ch *Cache) GetItem(key string) any {
@@ -58,6 +47,10 @@ func (ch *Cache) GetItem(key string) any {
 	return item.value
 }
 
+func (ch *Cache) GetItems() map[string]item {
+	return ch.items
+}
+
 func (ch *Cache) SetItem(key string, value any, expiry time.Time) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
@@ -69,32 +62,4 @@ func (ch *Cache) RemoveItem(key string) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
 	delete(ch.items, key)
-}
-
-func (ch *Cache) StartCacheCleaner() {
-	duration := time.Duration(ch.hz) * time.Millisecond
-	timer := time.NewTicker(duration)
-
-	for {
-		select {
-		case <-ch.cleanerStoppedC:
-			return
-
-		case <-timer.C:
-			for key, entry := range ch.items {
-				if entry.expiry.IsZero() {
-					continue
-				}
-
-				if entry.expiry.Before(time.Now()) {
-					ch.RemoveItem(key)
-				}
-			}
-		}
-	}
-
-}
-
-func (ch *Cache) StopCacheCleaner() {
-	close(ch.cleanerStoppedC)
 }
