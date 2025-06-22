@@ -8,43 +8,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// func handleIncomingConnection(c net.Conn, ctx context.Context) {
-// 	defer c.Close()
-// 	reader := bufio.NewReader(c)
-
-// 	for {
-// 		data, err := parseRespData(reader)
-
-// 		select {
-// 		case <-ctx.Done():
-// 			return
-
-// 		default:
-// 			if errors.Is(err, io.EOF) {
-// 				return
-// 			}
-
-// 			if errors.Is(err, errSyntax) {
-// 				errorMessage := generateErrorString("ERR", err.Error())
-// 				c.Write(errorMessage)
-// 				return
-// 			}
-
-// 			if err != nil {
-// 				errorMessage := generateErrorString("ERR", "unexpected server error")
-// 				c.Write(errorMessage)
-// 				return
-// 			}
-
-// 			if err := handleCommands(c, data); err != nil && !errors.Is(err, errInternal) {
-// 				errorMessage := generateErrorString("ERR", err.Error())
-// 				c.Write(errorMessage)
-// 				return
-// 			}
-// 		}
-// 	}
-// }
-
 func main() {
 	app := &cli.App{
 		Name: "Redis",
@@ -66,11 +29,11 @@ func main() {
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "dir",
+				Name:     "dbfilename",
 				Required: false,
 			},
 			&cli.StringFlag{
-				Name:     "dbfilename",
+				Name:     "dir",
 				Required: false,
 			},
 			&cli.StringFlag{

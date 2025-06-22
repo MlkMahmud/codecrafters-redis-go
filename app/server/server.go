@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -10,11 +12,13 @@ import (
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/cache"
+	"github.com/codecrafters-io/redis-starter-go/app/resp"
+	"github.com/codecrafters-io/redis-starter-go/app/utils"
 )
 
 type Server struct {
 	cache    *cache.Cache
-	config   map[string]any
+	config   map[string]string
 	errorC   chan error
 	host     string
 	hz       int
@@ -33,7 +37,7 @@ type ServerConfig struct {
 func NewServer(cfg ServerConfig) *Server {
 	return &Server{
 		cache:    cache.NewCache(),
-		config:   map[string]any{},
+		config:   map[string]string{},
 		errorC:   make(chan error, 1),
 		host:     cfg.Host,
 		hz:       cfg.HZ,
@@ -52,20 +56,20 @@ func (s *Server) GetConfigProperty(key string) any {
 	return nil
 }
 
-func (s *Server) SetConfigProperty(key string, value any) {
+func (s *Server) SetConfigProperty(key string, value string) {
 	s.config[key] = value
 }
 
 func (s *Server) Start() error {
-	sigC := make(chan os.Signal, 1)
-	signal.Notify(sigC, syscall.SIGTERM, syscall.SIGINT)
-
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	listener, err := net.Listen("tcp", addr)
 
 	if err != nil {
 		return err
 	}
+
+	sigC := make(chan os.Signal, 1)
+	signal.Notify(sigC, syscall.SIGTERM, syscall.SIGINT)
 
 	fmt.Printf("Listening on %s\n", addr)
 	s.listener = listener
@@ -83,8 +87,47 @@ func (s *Server) Start() error {
 	}
 }
 
-func (s *Server) handleIncomingConnection(_conn net.Conn) {
-	fmt.Print("wubba lubba dub dub")
+func (s *Server) handleIncomingConnection(conn net.Conn) {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+
+	for {
+		data, err := resp.Parse(reader)
+
+		select {
+		case <-s.stoppedC:
+			return
+
+		default:
+			if errors.Is(err, io.EOF) {
+				return
+			}
+
+			if errors.Is(err, resp.ErrSyntax) {
+				conn.Write(utils.GenerateErrorString("ERR", err.Error()))
+				return
+			}
+
+			if err != nil {
+				conn.Write(utils.GenerateErrorString("ERR", "unexpected server error"))
+				return
+			}
+
+			responses := s.handleCommands(data)
+
+			for response := range responses {
+				select {
+				case <-s.stoppedC:
+					return
+
+				default:
+					if _, err := conn.Write(response); err != nil {
+						return
+					}
+				}
+			}
+		}
+	}
 }
 
 func (s *Server) startCacheCleaner() {

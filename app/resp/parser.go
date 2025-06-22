@@ -1,4 +1,4 @@
-package main
+package resp
 
 import (
 	"bufio"
@@ -17,7 +17,11 @@ const (
 	simpleStringPrefix = '+'
 )
 
-func parseRespData(r *bufio.Reader) (any, error) {
+var (
+	ErrSyntax   = errors.New("syntax error")
+)
+
+func Parse(r *bufio.Reader) (any, error) {
 	delim, err := r.Peek(1)
 
 	if errors.Is(err, io.EOF) {
@@ -44,7 +48,7 @@ func parseRespData(r *bufio.Reader) (any, error) {
 		return parseSimpleString(r)
 
 	default:
-		return nil, fmt.Errorf("%w: unsupported data type \"%c\"", errSyntax, prefix)
+		return nil, fmt.Errorf("%w: unsupported data type \"%c\"", ErrSyntax, prefix)
 	}
 }
 
@@ -58,23 +62,23 @@ func parseArray(r *bufio.Reader) ([]any, error) {
 	lengthLine = bytes.TrimRight(lengthLine, "\r\n")
 
 	if len(lengthLine) == 0 || lengthLine[0] != arrayPrefix {
-		return nil, fmt.Errorf("%w: malformed array - array must begin with \"%c\" prefix", errSyntax, arrayPrefix)
+		return nil, fmt.Errorf("%w: malformed array - array must begin with \"%c\" prefix", ErrSyntax, arrayPrefix)
 	}
 
 	if len(lengthLine) < 2 {
-		return nil, fmt.Errorf("%w: malformed array - expected content after \"%c\" prefix", errSyntax, arrayPrefix)
+		return nil, fmt.Errorf("%w: malformed array - expected content after \"%c\" prefix", ErrSyntax, arrayPrefix)
 	}
 
 	length, err := strconv.Atoi(string(lengthLine[1:]))
 
 	if err != nil {
-		return nil, fmt.Errorf("%w: malformed array length \"%s\"", errSyntax, lengthLine[1:])
+		return nil, fmt.Errorf("%w: malformed array length \"%s\"", ErrSyntax, lengthLine[1:])
 	}
 
 	arr := make([]any, length)
 
 	for i := range length {
-		data, err := parseRespData(r)
+		data, err := Parse(r)
 
 		if err != nil {
 			return nil, err
@@ -96,17 +100,17 @@ func parseBulkString(r *bufio.Reader) ([]byte, error) {
 	lengthLine = bytes.TrimRight(lengthLine, "\r\n")
 
 	if len(lengthLine) < 2 {
-		return nil, fmt.Errorf("%w: malformed bulk string - length prefix \"%s\" is invalid", errSyntax, lengthLine)
+		return nil, fmt.Errorf("%w: malformed bulk string - length prefix \"%s\" is invalid", ErrSyntax, lengthLine)
 	}
 
 	if prefix := lengthLine[0]; prefix != bulkStringPrefix {
-		return nil, fmt.Errorf("%w: bulk strings must begin with a \"%c\" prefix not \"%c\"", errSyntax, bulkStringPrefix, prefix)
+		return nil, fmt.Errorf("%w: bulk strings must begin with a \"%c\" prefix not \"%c\"", ErrSyntax, bulkStringPrefix, prefix)
 	}
 
 	length, err := strconv.Atoi((string(lengthLine[1:])))
 
 	if err != nil {
-		return nil, fmt.Errorf("%w: malformed bulk string length \"%s\"", errSyntax, lengthLine[1:])
+		return nil, fmt.Errorf("%w: malformed bulk string length \"%s\"", ErrSyntax, lengthLine[1:])
 	}
 
 	if length == 0 {
@@ -122,7 +126,7 @@ func parseBulkString(r *bufio.Reader) ([]byte, error) {
 	dataLine = bytes.TrimRight(dataLine, "\r\n")
 
 	if strLength := len(dataLine); strLength != length {
-		return nil, fmt.Errorf("%w: bulk string length %d does not match expected length: %d", errSyntax, strLength, length)
+		return nil, fmt.Errorf("%w: bulk string length %d does not match expected length: %d", ErrSyntax, strLength, length)
 	}
 
 	return dataLine, nil
@@ -139,17 +143,17 @@ func parseInteger(r *bufio.Reader) (int, error) {
 	dataLineLength := len(dataLine)
 
 	if dataLineLength == 0 || dataLine[0] != integerPrefix {
-		return 0, fmt.Errorf("%w: malformed integer - integer must begin with \"%c\" prefix", errSyntax, integerPrefix)
+		return 0, fmt.Errorf("%w: malformed integer - integer must begin with \"%c\" prefix", ErrSyntax, integerPrefix)
 	}
 
 	if dataLineLength < 2 {
-		return 0, fmt.Errorf("%w: malformed integer - expected content after \"%c\" prefix", errSyntax, integerPrefix)
+		return 0, fmt.Errorf("%w: malformed integer - expected content after \"%c\" prefix", ErrSyntax, integerPrefix)
 	}
 
 	num, err := strconv.Atoi(string(dataLine[1:]))
 
 	if err != nil {
-		return 0, fmt.Errorf("%w: malformed integer value \"%s\"", errSyntax, dataLine[1:])
+		return 0, fmt.Errorf("%w: malformed integer value \"%s\"", ErrSyntax, dataLine[1:])
 	}
 
 	return num, nil
@@ -166,11 +170,11 @@ func parseSimpleString(r *bufio.Reader) ([]byte, error) {
 	dataLineLength := len(dataLine)
 
 	if dataLineLength == 0 || dataLine[0] != simpleStringPrefix {
-		return nil, fmt.Errorf("%w: malformed simple string - string must begin with \"%c\" prefix", errSyntax, simpleStringPrefix)
+		return nil, fmt.Errorf("%w: malformed simple string - string must begin with \"%c\" prefix", ErrSyntax, simpleStringPrefix)
 	}
 
 	if dataLineLength < 2 {
-		return nil, fmt.Errorf("%w: malformed simple string - expected content after \"%c\" prefix", errSyntax, simpleStringPrefix)
+		return nil, fmt.Errorf("%w: malformed simple string - expected content after \"%c\" prefix", ErrSyntax, simpleStringPrefix)
 	}
 
 	return dataLine[1:], nil
