@@ -196,7 +196,7 @@ func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 		return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command requires at least 2 arguments")
 	}
 
-	key, ok := args[0].([]byte)
+	rawKey, ok := args[0].([]byte)
 
 	if !ok {
 		return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command argument must be a string")
@@ -204,47 +204,52 @@ func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 
 	value := args[1]
 	argsConsumed = 2
+	key := string(rawKey)  
 
-	var expiry time.Time
+	expiry := time.Time{}
 
 	if argsLen < 3 {
-		expiry = time.Time{}
-	} else {
-		switch v := args[2].(type) {
-		case []byte:
-			if bytes.Equal(bytes.ToUpper(v), []byte("PX")) {
-				argsConsumed = 3
-
-				if argsLen < 4 {
-					return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command with \"PX\" option requires an expiry value")
-				}
-
-				var duration time.Duration
-				argsConsumed = 4
-
-				switch px := args[3].(type) {
-				case int:
-					duration = time.Duration(px) * time.Millisecond
-
-				case []byte:
-					d, err := strconv.Atoi(string(px))
-
-					if err != nil {
-						return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command \"PX\" options requires an integer expiry value")
-					}
-
-					duration = time.Duration(d) * time.Millisecond
-
-				default:
-					return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command \"PX\" options requires an integer expiry value")
-				}
-
-				expiry = time.Now().Add(duration)
-			}
-		}
+		cache.SetItem(key, value, expiry)
+		return argsConsumed, utils.GenerateSimpleString("OK")
 	}
 
-	cache.SetItem(string(key), value, expiry)
+	switch v := args[2].(type) {
+	case []byte:
+		if !bytes.Equal(bytes.ToUpper(v), []byte("PX")) {
+			cache.SetItem(key, value, expiry)
+			return argsConsumed, utils.GenerateSimpleString("OK")
+		}
+
+		argsConsumed += 1
+
+		if argsLen < 4 {
+			return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command with \"PX\" option requires an expiry value")
+		}
+
+		var duration time.Duration
+		argsConsumed += 1
+
+		switch px := args[3].(type) {
+		case int:
+			duration = time.Duration(px) * time.Millisecond
+
+		case []byte:
+			d, err := strconv.Atoi(string(px))
+
+			if err != nil {
+				return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command \"PX\" options requires an integer expiry value")
+			}
+
+			duration = time.Duration(d) * time.Millisecond
+
+		default:
+			return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command \"PX\" options requires an integer expiry value")
+		}
+
+		expiry = time.Now().Add(duration)
+	}
+
+	cache.SetItem(key, value, expiry)
 	response := utils.GenerateSimpleString("OK")
 
 	return argsConsumed, response

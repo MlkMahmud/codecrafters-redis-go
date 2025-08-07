@@ -12,13 +12,12 @@ import (
 const (
 	arrayPrefix        = '*'
 	bulkStringPrefix   = '$'
-	errorPrefix        = '-'
 	integerPrefix      = ':'
 	simpleStringPrefix = '+'
 )
 
 var (
-	ErrSyntax   = errors.New("syntax error")
+	ErrSyntax = errors.New("syntax error")
 )
 
 func Parse(r *bufio.Reader) (any, error) {
@@ -53,7 +52,7 @@ func Parse(r *bufio.Reader) (any, error) {
 }
 
 func parseArray(r *bufio.Reader) ([]any, error) {
-	lengthLine, err := r.ReadBytes(10)
+	lengthLine, err := r.ReadBytes('\n')
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read array length from buffer: %w", err)
