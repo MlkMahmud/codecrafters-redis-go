@@ -61,6 +61,15 @@ func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
 						return
 					}
 
+				case []any:
+					responses := s.handleCommands(t)
+
+					for res := range responses {
+						yield(res)
+					}
+
+					i += 1
+
 				default:
 					yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", t)))
 					return
