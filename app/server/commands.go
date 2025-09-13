@@ -61,15 +61,6 @@ func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
 						return
 					}
 
-				case []any:
-					responses := s.handleCommands(t)
-
-					for res := range responses {
-						yield(res)
-					}
-
-					i += 1
-
 				default:
 					yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", t)))
 					return
@@ -78,7 +69,7 @@ func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
 
 			return
 
-		// redis client sends commands as an array, however we might sometimes receive a "PING" command as a string.
+		// redis client sends commands as an array of bulk, however we might sometimes receive inline commands commands.
 		case []byte:
 			command := bytes.ToUpper(v)
 			_, response := s.executeCommand(command, []any{})
@@ -213,7 +204,7 @@ func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 
 	value := args[1]
 	argsConsumed = 2
-	key := string(rawKey)  
+	key := string(rawKey)
 
 	expiry := time.Time{}
 
