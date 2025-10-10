@@ -10,7 +10,10 @@ module github.com/codecrafters-io/redis-starter-go
 
 go 1.24.0
 
-require github.com/urfave/cli/v2 v2.27.7
+require (
+	github.com/urfave/cli/v2 v2.27.7
+	github.com/zhuyie/golzf v0.0.0-20161112031142-8387b0307ade
+)
 
 require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
