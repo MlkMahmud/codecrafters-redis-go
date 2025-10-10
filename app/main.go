@@ -13,8 +13,6 @@ func main() {
 		Name: "Redis",
 		Action: func(ctx *cli.Context) error {
 			server := server.NewServer(server.ServerConfig{
-				Host: ctx.String("host"),
-				HZ:   ctx.Int("hz"),
 				Port: ctx.Int("port"),
 			})
 
@@ -35,16 +33,6 @@ func main() {
 			&cli.StringFlag{
 				Name:     "dir",
 				Required: false,
-			},
-			&cli.StringFlag{
-				Name:     "host",
-				Required: false,
-				Value:    "0.0.0.0",
-			},
-			&cli.IntFlag{
-				Name:     "hz",
-				Required: false,
-				Value:    5000,
 			},
 			&cli.IntFlag{
 				Name:    "port",

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/cache"
 	"github.com/codecrafters-io/redis-starter-go/app/resp"
@@ -20,7 +19,6 @@ type Server struct {
 	cache    *cache.Cache
 	config   map[string]string
 	errorC   chan error
-	host     string
 	hz       int
 	listener net.Listener
 	port     int
@@ -28,9 +26,6 @@ type Server struct {
 }
 
 type ServerConfig struct {
-	Host string
-	// Controls the frequency (in milliseconds) at which the cache performs background tasks like expiring keys.
-	HZ   int
 	Port int
 }
 
@@ -39,8 +34,6 @@ func NewServer(cfg ServerConfig) *Server {
 		cache:    cache.NewCache(),
 		config:   map[string]string{},
 		errorC:   make(chan error, 1),
-		host:     cfg.Host,
-		hz:       cfg.HZ,
 		port:     cfg.Port,
 		stoppedC: make(chan struct{}, 1),
 	}
@@ -61,7 +54,7 @@ func (s *Server) SetConfigProperty(key string, value string) {
 }
 
 func (s *Server) Start() error {
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	addr := fmt.Sprintf("0.0.0.:%d", s.port)
 	listener, err := net.Listen("tcp", addr)
 
 	if err != nil {
@@ -75,7 +68,6 @@ func (s *Server) Start() error {
 	s.listener = listener
 
 	go s.startConnectionListener()
-	go s.startCacheCleaner()
 
 	defer s.stop()
 
@@ -123,42 +115,6 @@ func (s *Server) handleIncomingConnection(conn net.Conn) {
 				default:
 					if _, err := conn.Write(response); err != nil {
 						return
-					}
-				}
-			}
-		}
-	}
-}
-
-func (s *Server) startCacheCleaner() {
-	hz := s.hz
-
-	if hz == 0 {
-		hz = 5000
-	}
-
-	duration := time.Duration(hz) * time.Millisecond
-	timer := time.NewTicker(duration)
-
-	for {
-		select {
-		case <-s.stoppedC:
-			return
-
-		case <-timer.C:
-			for key, item := range s.cache.GetItems() {
-				select {
-				case <-s.stoppedC:
-					return
-
-				default:
-					expiry := item.GetTTL()
-					if expiry.IsZero() {
-						continue
-					}
-
-					if expiry.Before(time.Now()) {
-						s.cache.RemoveItem(key)
 					}
 				}
 			}
