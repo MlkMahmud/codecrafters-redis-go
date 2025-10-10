@@ -176,6 +176,9 @@ func handleGetCommand(cache *cache.Cache, args []any) (int, []byte) {
 	case []byte:
 		response = utils.GenerateBulkString(string(v))
 
+	case string:
+		response = utils.GenerateBulkString(v)
+
 	case nil:
 		response = utils.GenerateNullString()
 
