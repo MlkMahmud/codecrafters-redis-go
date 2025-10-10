@@ -12,12 +12,13 @@ func main() {
 	app := &cli.App{
 		Name: "Redis",
 		Action: func(ctx *cli.Context) error {
-			server := server.NewServer(server.ServerConfig{
+			server := server.NewServer(server.ServerOpts{
+				Config: server.NewConfig(map[string]string{
+					"dir":        ctx.String("dir"),
+					"dbfilename": ctx.String("dbfilename"),
+				}),
 				Port: ctx.Int("port"),
 			})
-
-			server.SetConfigProperty("dir", ctx.String("dir"))
-			server.SetConfigProperty("dbfilename", ctx.String("dbfilename"))
 
 			if err := server.Start(); err != nil {
 				return err

@@ -8,16 +8,18 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path"
 	"syscall"
 
 	"github.com/codecrafters-io/redis-starter-go/app/cache"
+	"github.com/codecrafters-io/redis-starter-go/app/rdb"
 	"github.com/codecrafters-io/redis-starter-go/app/resp"
 	"github.com/codecrafters-io/redis-starter-go/app/utils"
 )
 
 type Server struct {
 	cache    *cache.Cache
-	config   map[string]string
+	config   *Config
 	errorC   chan error
 	hz       int
 	listener net.Listener
@@ -25,36 +27,28 @@ type Server struct {
 	stoppedC chan struct{}
 }
 
-type ServerConfig struct {
-	Port int
+type ServerOpts struct {
+	Config *Config
+	Port   int
 }
 
-func NewServer(cfg ServerConfig) *Server {
+func NewServer(opts ServerOpts) *Server {
 	return &Server{
 		cache:    cache.NewCache(),
-		config:   map[string]string{},
+		config:   opts.Config,
 		errorC:   make(chan error, 1),
-		port:     cfg.Port,
+		port:     opts.Port,
 		stoppedC: make(chan struct{}, 1),
 	}
 }
 
-func (s *Server) GetConfigProperty(key string) any {
-	value, ok := s.config[key]
-
-	if ok {
-		return value
+func (s *Server) Start() error {
+	// attempt to loadRdb file if present.
+	if err := s.loadRdbFile(); err != nil {
+		return err
 	}
 
-	return nil
-}
-
-func (s *Server) SetConfigProperty(key string, value string) {
-	s.config[key] = value
-}
-
-func (s *Server) Start() error {
-	addr := fmt.Sprintf("0.0.0.:%d", s.port)
+	addr := fmt.Sprintf("0.0.0.0:%d", s.port)
 	listener, err := net.Listen("tcp", addr)
 
 	if err != nil {
@@ -120,6 +114,39 @@ func (s *Server) handleIncomingConnection(conn net.Conn) {
 			}
 		}
 	}
+}
+
+// When the "dir" and "dbfilename" options are provided
+// it parses the Redis Database file and adds the parsed database entries to the
+// server's cache.
+func (s *Server) loadRdbFile() error {
+	dir := s.config.Get("dir")
+	dbFilename := s.config.Get("dbfilename")
+
+	// if either the "dir" or "dbFilename" is not provided exit immediately
+	if dir == "" || dbFilename == "" {
+		return nil
+	}
+
+	parser := rdb.NewParser()
+	src := path.Join(dir, dbFilename)
+
+	entries, err := parser.Parse(src)
+
+	if err != nil {
+		return fmt.Errorf("failed to load \"%s\" file: %w", src, err)
+	}
+
+	for _, entry := range entries {
+		// todo: support multiple logical databases
+		if entry.DatabaseIndex != 0 {
+			continue
+		}
+
+		s.cache.SetItem(entry.Key, entry.Value, entry.Expiry)
+	}
+
+	return nil
 }
 
 func (s *Server) startConnectionListener() {

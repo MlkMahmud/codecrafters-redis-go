@@ -84,7 +84,7 @@ func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
 	}
 }
 
-func handleConfigCommand(config map[string]string, args []any) (int, []byte) {
+func handleConfigCommand(config *Config, args []any) (int, []byte) {
 	argsLen := len(args)
 	invalidSubcommandErr := "\"CONFIG\" command must be followed by one of the following subcommands \"GET\", \"HELP\", \"RESETSTAT\", \"REWRITE\" or \"SET\""
 
@@ -109,7 +109,7 @@ func handleConfigCommand(config map[string]string, args []any) (int, []byte) {
 	}
 }
 
-func handleConfigGetCommand(config map[string]string, args []any) []byte {
+func handleConfigGetCommand(config *Config, args []any) []byte {
 	if len(args) == 0 {
 		return utils.GenerateErrorString("ERR", "\"CONFIG GET\" command requires at least one argument")
 	}
@@ -124,14 +124,14 @@ func handleConfigGetCommand(config map[string]string, args []any) []byte {
 		}
 
 		key := string(parameter)
-		value, ok := config[key]
+		value := config.Get(key)
 
 		entries = append(entries, utils.GenerateBulkString(key))
 
-		if ok {
-			entries = append(entries, utils.GenerateBulkString(value))
-		} else {
+		if value == "" {
 			entries = append(entries, utils.GenerateNullString())
+		} else {
+			entries = append(entries, utils.GenerateBulkString(value))
 		}
 	}
 
