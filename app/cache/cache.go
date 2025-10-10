@@ -58,6 +58,10 @@ func (ch *Cache) SetItem(key string, value any, expiry time.Time) {
 	ch.items[key] = item{value: value, expiry: expiry}
 }
 
+func (ch *Cache) Size() int {
+	return len(ch.items)
+}
+
 func (ch *Cache) RemoveItem(key string) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()

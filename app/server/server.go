@@ -120,16 +120,13 @@ func (s *Server) handleIncomingConnection(conn net.Conn) {
 // it parses the Redis Database file and adds the parsed database entries to the
 // server's cache.
 func (s *Server) loadRdbFile() error {
-	dir := s.config.Get("dir")
-	dbFilename := s.config.Get("dbfilename")
+	src := path.Join(s.config.Get("dir"), s.config.Get("dbfilename"))
 
-	// if either the "dir" or "dbFilename" is not provided exit immediately
-	if dir == "" || dbFilename == "" {
+	if !utils.FileExists(src) {
 		return nil
 	}
 
 	parser := rdb.NewParser()
-	src := path.Join(dir, dbFilename)
 
 	entries, err := parser.Parse(src)
 

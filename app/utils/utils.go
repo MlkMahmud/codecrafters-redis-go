@@ -3,7 +3,13 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"os"
 )
+
+func FileExists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	return !os.IsNotExist(err)
+}
 
 func GenerateArrayString(items [][]byte) []byte {
 	delimiter := []byte("")

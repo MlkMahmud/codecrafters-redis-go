@@ -15,6 +15,7 @@ var (
 	CONFIG = []byte("CONFIG")
 	ECHO   = []byte("ECHO")
 	GET    = []byte("GET")
+	KEYS   = []byte("KEYS")
 	PING   = []byte("PING")
 	SET    = []byte("SET")
 )
@@ -32,6 +33,9 @@ func (s *Server) executeCommand(command []byte, args []any) (int, []byte) {
 
 	case bytes.Equal(command, GET):
 		return handleGetCommand(s.cache, args)
+
+	case bytes.Equal(command, KEYS):
+		return handleKeysCommand(s.cache, args)
 
 	case bytes.Equal(command, SET):
 		return handleSetCommand(s.cache, args)
@@ -180,6 +184,32 @@ func handleGetCommand(cache *cache.Cache, args []any) (int, []byte) {
 	}
 
 	return 1, response
+}
+
+func handleKeysCommand(cache *cache.Cache, args []any) (int, []byte) {
+	if len(args) < 1 {
+		return 0, utils.GenerateErrorString("ERR", "\"KEYS\" command requires at least 1 argument")
+	}
+
+	pattern, ok := args[0].([]byte)
+
+	if !ok {
+		return 0, utils.GenerateErrorString("ERR", "\"KEYS\" command argument must be a string")
+	}
+
+	if !bytes.Equal(pattern, []byte("*")) {
+		return 1, utils.GenerateArrayString([][]byte{})
+	}
+
+	entries := make([][]byte, cache.Size())
+	index := 0
+
+	for key := range cache.GetItems() {
+		entries[index] = utils.GenerateBulkString(key)
+		index += 1
+	}
+
+	return 1, utils.GenerateArrayString(entries)
 }
 
 func handlePingCommand() (int, []byte) {
