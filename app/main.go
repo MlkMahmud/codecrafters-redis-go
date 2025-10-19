@@ -17,7 +17,8 @@ func main() {
 					"dir":        ctx.String("dir"),
 					"dbfilename": ctx.String("dbfilename"),
 				}),
-				Port: ctx.Int("port"),
+				IsReplica: ctx.String("replicaof") != "",
+				Port:      ctx.Int("port"),
 			})
 
 			if err := server.Start(); err != nil {
@@ -39,6 +40,10 @@ func main() {
 				Name:    "port",
 				Aliases: []string{"p"},
 				Value:   6379,
+			},
+			&cli.StringFlag{
+				Name:     "replicaof",
+				Required: false,
 			},
 		},
 	}

@@ -21,23 +21,31 @@ type Server struct {
 	cache    *cache.Cache
 	config   *Config
 	errorC   chan error
-	hz       int
 	listener net.Listener
 	port     int
+	role     string
 	stoppedC chan struct{}
 }
 
 type ServerOpts struct {
-	Config *Config
-	Port   int
+	Config    *Config
+	IsReplica bool
+	Port      int
 }
 
 func NewServer(opts ServerOpts) *Server {
+	role := "master"
+
+	if opts.IsReplica {
+		role = "slave"
+	}
+
 	return &Server{
 		cache:    cache.NewCache(),
 		config:   opts.Config,
 		errorC:   make(chan error, 1),
 		port:     opts.Port,
+		role:     role,
 		stoppedC: make(chan struct{}, 1),
 	}
 }

@@ -15,78 +15,11 @@ var (
 	CONFIG = []byte("CONFIG")
 	ECHO   = []byte("ECHO")
 	GET    = []byte("GET")
+	INFO   = []byte("INFO")
 	KEYS   = []byte("KEYS")
 	PING   = []byte("PING")
 	SET    = []byte("SET")
 )
-
-func (s *Server) executeCommand(command []byte, args []any) (int, []byte) {
-	switch {
-	case bytes.Equal(command, CONFIG):
-		return handleConfigCommand(s.config, args)
-
-	case bytes.Equal(command, PING):
-		return handlePingCommand()
-
-	case bytes.Equal(command, ECHO):
-		return handleEchoCommand(args)
-
-	case bytes.Equal(command, GET):
-		return handleGetCommand(s.cache, args)
-
-	case bytes.Equal(command, KEYS):
-		return handleKeysCommand(s.cache, args)
-
-	case bytes.Equal(command, SET):
-		return handleSetCommand(s.cache, args)
-
-	default:
-		return 0, utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported command \"%s\"", command))
-	}
-}
-
-func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
-	return func(yield func([]byte) bool) {
-		switch v := commands.(type) {
-
-		case []any:
-			for i := 0; i < len(v); {
-				switch t := v[i].(type) {
-				case []byte:
-					command := bytes.ToUpper(t)
-
-					args := v[i+1:]
-					argsConsumed, response := s.executeCommand(command, args)
-
-					i += 1 // add one for the command
-					i += argsConsumed
-
-					if !yield(response) {
-						return
-					}
-
-				default:
-					yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", t)))
-					return
-				}
-			}
-
-			return
-
-		// redis client sends commands as an array of bulk, however we might sometimes receive inline commands commands.
-		case []byte:
-			command := bytes.ToUpper(v)
-			_, response := s.executeCommand(command, []any{})
-
-			yield(response)
-			return
-
-		default:
-			yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", v)))
-			return
-		}
-	}
-}
 
 func handleConfigCommand(config *Config, args []any) (int, []byte) {
 	argsLen := len(args)
@@ -189,6 +122,28 @@ func handleGetCommand(cache *cache.Cache, args []any) (int, []byte) {
 	return 1, response
 }
 
+func handleInfoCommand(s *Server, args []any) (int, []byte) {
+	if len(args) < 1 {
+		// todo: handle "INFO" command without 'section' argument
+		return 0, utils.GenerateNullString()
+	}
+
+	section, ok := args[0].([]byte)
+
+	if !ok {
+		return 0, utils.GenerateErrorString("ERR", "\"INFO\" command argument must be a string")
+	}
+
+	if !bytes.Equal(bytes.ToLower(section), []byte("replication")) {
+		// todo: handle "INFO" section arguments beyond "replication"
+		return 0, utils.GenerateNullString()
+	}
+
+	response := utils.GenerateBulkString(fmt.Sprintf("role:%s", s.role))
+
+	return 1, response
+}
+
 func handleKeysCommand(cache *cache.Cache, args []any) (int, []byte) {
 	if len(args) < 1 {
 		return 0, utils.GenerateErrorString("ERR", "\"KEYS\" command requires at least 1 argument")
@@ -286,4 +241,75 @@ func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 	response := utils.GenerateSimpleString("OK")
 
 	return argsConsumed, response
+}
+
+func (s *Server) executeCommand(command []byte, args []any) (int, []byte) {
+	switch {
+	case bytes.Equal(command, CONFIG):
+		return handleConfigCommand(s.config, args)
+
+	case bytes.Equal(command, PING):
+		return handlePingCommand()
+
+	case bytes.Equal(command, ECHO):
+		return handleEchoCommand(args)
+
+	case bytes.Equal(command, GET):
+		return handleGetCommand(s.cache, args)
+
+	case bytes.Equal(command, INFO):
+		return handleInfoCommand(s, args)
+
+	case bytes.Equal(command, KEYS):
+		return handleKeysCommand(s.cache, args)
+
+	case bytes.Equal(command, SET):
+		return handleSetCommand(s.cache, args)
+
+	default:
+		return 0, utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported command \"%s\"", command))
+	}
+}
+
+func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {
+		switch v := commands.(type) {
+
+		case []any:
+			for i := 0; i < len(v); {
+				switch t := v[i].(type) {
+				case []byte:
+					command := bytes.ToUpper(t)
+
+					args := v[i+1:]
+					argsConsumed, response := s.executeCommand(command, args)
+
+					i += 1 // add one for the command
+					i += argsConsumed
+
+					if !yield(response) {
+						return
+					}
+
+				default:
+					yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", t)))
+					return
+				}
+			}
+
+			return
+
+		// redis client sends commands as an array of bulk, however we might sometimes receive inline commands commands.
+		case []byte:
+			command := bytes.ToUpper(v)
+			_, response := s.executeCommand(command, []any{})
+
+			yield(response)
+			return
+
+		default:
+			yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", v)))
+			return
+		}
+	}
 }
