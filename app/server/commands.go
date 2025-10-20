@@ -139,7 +139,7 @@ func handleInfoCommand(s *Server, args []any) (int, []byte) {
 		return 0, utils.GenerateNullString()
 	}
 
-	response := utils.GenerateBulkString(fmt.Sprintf("role:%s", s.role))
+	response := utils.GenerateBulkString(fmt.Sprintf("role:%s\nmaster_replid:%s\nnmaster_repl_offset:%d", s.role, s.replicationId, s.replicationOffset))
 
 	return 1, response
 }

@@ -18,13 +18,15 @@ import (
 )
 
 type Server struct {
-	cache    *cache.Cache
-	config   *Config
-	errorC   chan error
-	listener net.Listener
-	port     int
-	role     string
-	stoppedC chan struct{}
+	cache             *cache.Cache
+	config            *Config
+	errorC            chan error
+	listener          net.Listener
+	port              int
+	role              string
+	replicationId     string
+	replicationOffset int
+	stoppedC          chan struct{}
 }
 
 type ServerOpts struct {
@@ -41,12 +43,14 @@ func NewServer(opts ServerOpts) *Server {
 	}
 
 	return &Server{
-		cache:    cache.NewCache(),
-		config:   opts.Config,
-		errorC:   make(chan error, 1),
-		port:     opts.Port,
-		role:     role,
-		stoppedC: make(chan struct{}, 1),
+		cache:             cache.NewCache(),
+		config:            opts.Config,
+		errorC:            make(chan error, 1),
+		port:              opts.Port,
+		replicationId:     utils.GenerateRandomString(40),
+		replicationOffset: 0,
+		role:              role,
+		stoppedC:          make(chan struct{}, 1),
 	}
 }
 

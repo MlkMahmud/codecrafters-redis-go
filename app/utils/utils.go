@@ -3,7 +3,9 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 )
 
 func FileExists(filePath string) bool {
@@ -26,6 +28,18 @@ func GenerateErrorString(prefix, message string) []byte {
 
 func GenerateNullString() []byte {
 	return []byte("$-1\r\n")
+}
+
+func GenerateRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	seed := rand.NewSource(time.Now().UnixNano())
+	random := rand.New(seed)
+
+	result := make([]byte, length)
+	for i := range result {
+		result[i] = charset[random.Intn(len(charset))]
+	}
+	return string(result)
 }
 
 func GenerateSimpleString(str string) []byte {
