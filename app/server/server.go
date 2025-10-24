@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strings"
 	"syscall"
 
 	"github.com/codecrafters-io/redis-starter-go/app/cache"
@@ -30,15 +31,14 @@ type Server struct {
 }
 
 type ServerOpts struct {
-	Config    *Config
-	IsReplica bool
-	Port      int
+	Config *Config
+	Port   int
 }
 
 func NewServer(opts ServerOpts) *Server {
 	role := "master"
 
-	if opts.IsReplica {
+	if opts.Config.Get("replicaof") != "" {
 		role = "slave"
 	}
 
@@ -57,6 +57,11 @@ func NewServer(opts ServerOpts) *Server {
 func (s *Server) Start() error {
 	// attempt to loadRdb file if present.
 	if err := s.loadRdbFile(); err != nil {
+		return err
+	}
+
+	// attempt to connect to the master server if the server is a replica
+	if err := s.connectToMaster(); err != nil {
 		return err
 	}
 
@@ -83,6 +88,38 @@ func (s *Server) Start() error {
 	case err := <-s.errorC:
 		return err
 	}
+}
+
+func (s *Server) connectToMaster() error {
+	if s.role == "master" {
+		return nil
+	}
+
+	replicaOf := s.config.Get("replicaof")
+
+	if replicaOf == "" {
+		return fmt.Errorf("replicaof option is not provided")
+	}
+
+	address := strings.Split(replicaOf, " ")
+	host := address[0]
+	port := address[1]
+
+	conn, err := net.Dial("tcp", net.JoinHostPort(host, port))
+
+	if err != nil {
+		return fmt.Errorf("failed to connect to master server: %w", err)
+	}
+
+	defer conn.Close()
+
+	cmd := utils.GenerateArrayString([][]byte{utils.GenerateBulkString("PING")})
+
+	if _, err := conn.Write(cmd); err != nil {
+		return fmt.Errorf("failed to PING master server: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Server) handleIncomingConnection(conn net.Conn) {

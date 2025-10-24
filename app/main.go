@@ -16,9 +16,9 @@ func main() {
 				Config: server.NewConfig(map[string]string{
 					"dir":        ctx.String("dir"),
 					"dbfilename": ctx.String("dbfilename"),
+					"replicaof":  ctx.String("replicaof"),
 				}),
-				IsReplica: ctx.String("replicaof") != "",
-				Port:      ctx.Int("port"),
+				Port: ctx.Int("port"),
 			})
 
 			if err := server.Start(); err != nil {
