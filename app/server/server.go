@@ -113,10 +113,31 @@ func (s *Server) connectToMaster() error {
 
 	defer conn.Close()
 
-	cmd := utils.GenerateArrayString([][]byte{utils.GenerateBulkString("PING")})
+	pingCmd := utils.GenerateArrayString([][]byte{utils.GenerateBulkString("PING")})
+	// generic success response contains 5 bytes +OK\r\n
+	okResponseBuf := make([]byte, 5)
+	// PING response contains 7 bytes +PONG\r\n
+	pingResponseBuf := make([]byte, 7)
 
-	if _, err := conn.Write(cmd); err != nil {
+	if _, err := conn.Write(pingCmd); err != nil {
 		return fmt.Errorf("failed to PING master server: %w", err)
+	}
+
+	if _, err := io.ReadAtLeast(conn, pingResponseBuf, len(pingResponseBuf)); err != nil {
+		return fmt.Errorf("failed to received correct PING response from server: %w", err)
+	}
+
+	for _, cmd := range [][]byte{
+		utils.GenerateArrayString([][]byte{utils.GenerateBulkString("REPLCONF"), utils.GenerateBulkString("listening-port"), utils.GenerateBulkString(fmt.Sprintf("%d", s.port))}),
+		utils.GenerateArrayString([][]byte{utils.GenerateBulkString("REPLCONF"), utils.GenerateBulkString("capa"), utils.GenerateBulkString("psync2")})} {
+
+		if _, err := conn.Write(cmd); err != nil {
+			return fmt.Errorf("failed to send \"%s\" command: %w", cmd, err)
+		}
+
+		if _, err := io.ReadAtLeast(conn, okResponseBuf, len(okResponseBuf)); err != nil {
+			return fmt.Errorf("failed to received \"%s\" response from master server: %w", cmd, err)
+		}
 	}
 
 	return nil
