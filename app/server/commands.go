@@ -12,13 +12,14 @@ import (
 )
 
 var (
-	CONFIG = []byte("CONFIG")
-	ECHO   = []byte("ECHO")
-	GET    = []byte("GET")
-	INFO   = []byte("INFO")
-	KEYS   = []byte("KEYS")
-	PING   = []byte("PING")
-	SET    = []byte("SET")
+	CONFIG   = []byte("CONFIG")
+	ECHO     = []byte("ECHO")
+	GET      = []byte("GET")
+	INFO     = []byte("INFO")
+	KEYS     = []byte("KEYS")
+	PING     = []byte("PING")
+	REPLCONF = []byte("REPLCONF")
+	SET      = []byte("SET")
 )
 
 func handleConfigCommand(config *Config, args []any) (int, []byte) {
@@ -176,6 +177,12 @@ func handlePingCommand() (int, []byte) {
 	return 0, response
 }
 
+func handleReplConfCommand(args []any) (int, []byte) {
+	response := utils.GenerateSimpleString("OK")
+
+	return 2, response
+}
+
 func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 	argsLen := len(args)
 	argsConsumed := 0
@@ -262,6 +269,9 @@ func (s *Server) executeCommand(command []byte, args []any) (int, []byte) {
 
 	case bytes.Equal(command, KEYS):
 		return handleKeysCommand(s.cache, args)
+
+	case bytes.Equal(command, REPLCONF):
+		return handleReplConfCommand(args)
 
 	case bytes.Equal(command, SET):
 		return handleSetCommand(s.cache, args)
