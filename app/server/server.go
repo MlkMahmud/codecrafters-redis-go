@@ -113,7 +113,7 @@ func (s *Server) connectToMaster() error {
 
 	defer conn.Close()
 
-	pingCmd := utils.GenerateArrayString([][]byte{utils.GenerateBulkString("PING")})
+	pingCmd := resp.EncodeArray([][]byte{resp.EncodeBulkString("PING")})
 	// PING response contains 7 bytes +PONG\r\n
 	pingResponseBuf := make([]byte, 7)
 
@@ -129,8 +129,8 @@ func (s *Server) connectToMaster() error {
 	okResponseBuf := make([]byte, 5)
 
 	for _, cmd := range [][]byte{
-		utils.GenerateArrayString([][]byte{utils.GenerateBulkString("REPLCONF"), utils.GenerateBulkString("listening-port"), utils.GenerateBulkString(fmt.Sprintf("%d", s.port))}),
-		utils.GenerateArrayString([][]byte{utils.GenerateBulkString("REPLCONF"), utils.GenerateBulkString("capa"), utils.GenerateBulkString("psync2")})} {
+		resp.EncodeArray([][]byte{resp.EncodeBulkString("REPLCONF"), resp.EncodeBulkString("listening-port"), resp.EncodeBulkString(fmt.Sprintf("%d", s.port))}),
+		resp.EncodeArray([][]byte{resp.EncodeBulkString("REPLCONF"), resp.EncodeBulkString("capa"), resp.EncodeBulkString("psync2")})} {
 
 		if _, err := conn.Write(cmd); err != nil {
 			return fmt.Errorf("failed to send \"%s\" command: %w", cmd, err)
@@ -141,7 +141,7 @@ func (s *Server) connectToMaster() error {
 		}
 	}
 
-	if _, err := conn.Write(utils.GenerateArrayString([][]byte{utils.GenerateBulkString("PSYNC"), utils.GenerateBulkString("?"), utils.GenerateBulkString("-1")})); err != nil {
+	if _, err := conn.Write(resp.EncodeArray([][]byte{resp.EncodeBulkString("PSYNC"), resp.EncodeBulkString("?"), resp.EncodeBulkString("-1")})); err != nil {
 		return fmt.Errorf("failed to send PSYNC command: %w", err)
 	}
 
@@ -165,12 +165,12 @@ func (s *Server) handleIncomingConnection(conn net.Conn) {
 			}
 
 			if errors.Is(err, resp.ErrSyntax) {
-				conn.Write(utils.GenerateErrorString("ERR", err.Error()))
+				conn.Write(resp.EncodeError(err.Error()))
 				return
 			}
 
 			if err != nil {
-				conn.Write(utils.GenerateErrorString("ERR", "unexpected server error"))
+				conn.Write(resp.EncodeError("unexpected server error"))
 				return
 			}
 

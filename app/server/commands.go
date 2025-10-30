@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/cache"
-	"github.com/codecrafters-io/redis-starter-go/app/utils"
+	"github.com/codecrafters-io/redis-starter-go/app/resp"
 )
 
 var (
@@ -27,7 +27,7 @@ func handleConfigCommand(config *Config, args []any) (int, []byte) {
 	invalidSubcommandErr := "\"CONFIG\" command must be followed by one of the following subcommands \"GET\", \"HELP\", \"RESETSTAT\", \"REWRITE\" or \"SET\""
 
 	if argsLen == 0 {
-		return 0, utils.GenerateErrorString("ERR", invalidSubcommandErr)
+		return 0, resp.EncodeError(invalidSubcommandErr)
 	}
 
 	subcommand, ok := args[0].([]byte)
@@ -49,7 +49,7 @@ func handleConfigCommand(config *Config, args []any) (int, []byte) {
 
 func handleConfigGetCommand(config *Config, args []any) []byte {
 	if len(args) == 0 {
-		return utils.GenerateErrorString("ERR", "\"CONFIG GET\" command requires at least one argument")
+		return resp.EncodeError("\"CONFIG GET\" command requires at least one argument")
 	}
 
 	entries := [][]byte{}
@@ -58,49 +58,49 @@ func handleConfigGetCommand(config *Config, args []any) []byte {
 		parameter, ok := arg.([]byte)
 
 		if !ok {
-			return utils.GenerateErrorString("ERR", "\"CONFIG GET\" argument must be a string")
+			return resp.EncodeError("\"CONFIG GET\" argument must be a string")
 		}
 
 		key := string(parameter)
 		value := config.Get(key)
 
-		entries = append(entries, utils.GenerateBulkString(key))
+		entries = append(entries, resp.EncodeBulkString(key))
 
 		if value == "" {
-			entries = append(entries, utils.GenerateNullString())
+			entries = append(entries, resp.EncodeNull())
 		} else {
-			entries = append(entries, utils.GenerateBulkString(value))
+			entries = append(entries, resp.EncodeBulkString(value))
 		}
 	}
 
-	return utils.GenerateArrayString(entries)
+	return resp.EncodeArray(entries)
 }
 
 func handleEchoCommand(args []any) (int, []byte) {
 	if len(args) < 1 {
-		return 0, utils.GenerateErrorString("ERR", "\"ECHO\" command requires at least 1 argument")
+		return 0, resp.EncodeError("\"ECHO\" command requires at least 1 argument")
 	}
 
 	arg, ok := args[0].([]byte)
 
 	if !ok {
-		return 0, utils.GenerateErrorString("ERR", "\"ECHO\" command argument must be a string argument")
+		return 0, resp.EncodeError("\"ECHO\" command argument must be a string argument")
 	}
 
-	response := utils.GenerateBulkString(string(arg))
+	response := resp.EncodeBulkString(string(arg))
 
 	return 1, response
 }
 
 func handleGetCommand(cache *cache.Cache, args []any) (int, []byte) {
 	if len(args) < 1 {
-		return 0, utils.GenerateErrorString("ERR", "\"GET\" command requires at least 1 argument")
+		return 0, resp.EncodeError("\"GET\" command requires at least 1 argument")
 	}
 
 	key, ok := args[0].([]byte)
 
 	if !ok {
-		return 0, utils.GenerateErrorString("ERR", "\"GET\" command argument must be a string")
+		return 0, resp.EncodeError("\"GET\" command argument must be a string")
 	}
 
 	item := cache.GetItem(string(key))
@@ -108,16 +108,16 @@ func handleGetCommand(cache *cache.Cache, args []any) (int, []byte) {
 
 	switch v := item.(type) {
 	case []byte:
-		response = utils.GenerateBulkString(string(v))
+		response = resp.EncodeBulkString(string(v))
 
 	case string:
-		response = utils.GenerateBulkString(v)
+		response = resp.EncodeBulkString(v)
 
 	case nil:
-		response = utils.GenerateNullString()
+		response = resp.EncodeNull()
 
 	default:
-		return 1, utils.GenerateErrorString("ERR", "unsupported data type")
+		return 1, resp.EncodeError("unsupported data type")
 	}
 
 	return 1, response
@@ -126,59 +126,59 @@ func handleGetCommand(cache *cache.Cache, args []any) (int, []byte) {
 func handleInfoCommand(s *Server, args []any) (int, []byte) {
 	if len(args) < 1 {
 		// todo: handle "INFO" command without 'section' argument
-		return 0, utils.GenerateNullString()
+		return 0, resp.EncodeNull()
 	}
 
 	section, ok := args[0].([]byte)
 
 	if !ok {
-		return 0, utils.GenerateErrorString("ERR", "\"INFO\" command argument must be a string")
+		return 0, resp.EncodeError("\"INFO\" command argument must be a string")
 	}
 
 	if !bytes.Equal(bytes.ToLower(section), []byte("replication")) {
 		// todo: handle "INFO" section arguments beyond "replication"
-		return 0, utils.GenerateNullString()
+		return 0, resp.EncodeNull()
 	}
 
-	response := utils.GenerateBulkString(fmt.Sprintf("role:%s\nmaster_replid:%s\nnmaster_repl_offset:%d", s.role, s.replicationId, s.replicationOffset))
+	response := resp.EncodeBulkString(fmt.Sprintf("role:%s\nmaster_replid:%s\nnmaster_repl_offset:%d", s.role, s.replicationId, s.replicationOffset))
 
 	return 1, response
 }
 
 func handleKeysCommand(cache *cache.Cache, args []any) (int, []byte) {
 	if len(args) < 1 {
-		return 0, utils.GenerateErrorString("ERR", "\"KEYS\" command requires at least 1 argument")
+		return 0, resp.EncodeError("\"KEYS\" command requires at least 1 argument")
 	}
 
 	pattern, ok := args[0].([]byte)
 
 	if !ok {
-		return 0, utils.GenerateErrorString("ERR", "\"KEYS\" command argument must be a string")
+		return 0, resp.EncodeError("\"KEYS\" command argument must be a string")
 	}
 
 	if !bytes.Equal(pattern, []byte("*")) {
-		return 1, utils.GenerateArrayString([][]byte{})
+		return 1, resp.EncodeArray([][]byte{})
 	}
 
 	entries := make([][]byte, cache.Size())
 	index := 0
 
 	for key := range cache.GetItems() {
-		entries[index] = utils.GenerateBulkString(key)
+		entries[index] = resp.EncodeBulkString(key)
 		index += 1
 	}
 
-	return 1, utils.GenerateArrayString(entries)
+	return 1, resp.EncodeArray(entries)
 }
 
 func handlePingCommand() (int, []byte) {
-	response := utils.GenerateSimpleString("PONG")
+	response := resp.EncodeSimpleString("PONG")
 
 	return 0, response
 }
 
 func handleReplConfCommand(args []any) (int, []byte) {
-	response := utils.GenerateSimpleString("OK")
+	response := resp.EncodeSimpleString("OK")
 
 	return 2, response
 }
@@ -188,13 +188,13 @@ func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 	argsConsumed := 0
 
 	if argsLen < 2 {
-		return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command requires at least 2 arguments")
+		return argsConsumed, resp.EncodeError("\"SET\" command requires at least 2 arguments")
 	}
 
 	rawKey, ok := args[0].([]byte)
 
 	if !ok {
-		return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command argument must be a string")
+		return argsConsumed, resp.EncodeError("\"SET\" command argument must be a string")
 	}
 
 	value := args[1]
@@ -205,20 +205,20 @@ func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 
 	if argsLen < 3 {
 		cache.SetItem(key, value, expiry)
-		return argsConsumed, utils.GenerateSimpleString("OK")
+		return argsConsumed, resp.EncodeSimpleString("OK")
 	}
 
 	switch v := args[2].(type) {
 	case []byte:
 		if !bytes.Equal(bytes.ToUpper(v), []byte("PX")) {
 			cache.SetItem(key, value, expiry)
-			return argsConsumed, utils.GenerateSimpleString("OK")
+			return argsConsumed, resp.EncodeSimpleString("OK")
 		}
 
 		argsConsumed += 1
 
 		if argsLen < 4 {
-			return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command with \"PX\" option requires an expiry value")
+			return argsConsumed, resp.EncodeError("\"SET\" command with \"PX\" option requires an expiry value")
 		}
 
 		var duration time.Duration
@@ -232,20 +232,20 @@ func handleSetCommand(cache *cache.Cache, args []any) (int, []byte) {
 			d, err := strconv.Atoi(string(px))
 
 			if err != nil {
-				return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command \"PX\" options requires an integer expiry value")
+				return argsConsumed, resp.EncodeError("\"SET\" command \"PX\" options requires an integer expiry value")
 			}
 
 			duration = time.Duration(d) * time.Millisecond
 
 		default:
-			return argsConsumed, utils.GenerateErrorString("ERR", "\"SET\" command \"PX\" options requires an integer expiry value")
+			return argsConsumed, resp.EncodeError("\"SET\" command \"PX\" options requires an integer expiry value")
 		}
 
 		expiry = time.Now().Add(duration)
 	}
 
 	cache.SetItem(key, value, expiry)
-	response := utils.GenerateSimpleString("OK")
+	response := resp.EncodeSimpleString("OK")
 
 	return argsConsumed, response
 }
@@ -277,7 +277,7 @@ func (s *Server) executeCommand(command []byte, args []any) (int, []byte) {
 		return handleSetCommand(s.cache, args)
 
 	default:
-		return 0, utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported command \"%s\"", command))
+		return 0, resp.EncodeError(fmt.Sprintf("unsupported command \"%s\"", command))
 	}
 }
 
@@ -302,7 +302,7 @@ func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
 					}
 
 				default:
-					yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", t)))
+					yield(resp.EncodeError(fmt.Sprintf("unsupported data type %T", t)))
 					return
 				}
 			}
@@ -318,7 +318,7 @@ func (s *Server) handleCommands(commands any) iter.Seq[[]byte] {
 			return
 
 		default:
-			yield(utils.GenerateErrorString("ERR", fmt.Sprintf("unsupported data type %T", v)))
+			yield(resp.EncodeError(fmt.Sprintf("unsupported data type %T", v)))
 			return
 		}
 	}
