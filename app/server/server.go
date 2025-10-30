@@ -174,19 +174,7 @@ func (s *Server) handleIncomingConnection(conn net.Conn) {
 				return
 			}
 
-			responses := s.handleCommands(data)
-
-			for response := range responses {
-				select {
-				case <-s.stoppedC:
-					return
-
-				default:
-					if _, err := conn.Write(response); err != nil {
-						return
-					}
-				}
-			}
+			s.handleCommands(conn, data)
 		}
 	}
 }
