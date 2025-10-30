@@ -18,6 +18,7 @@ var (
 	INFO     = []byte("INFO")
 	KEYS     = []byte("KEYS")
 	PING     = []byte("PING")
+	PSYNC    = []byte("PSYNC")
 	REPLCONF = []byte("REPLCONF")
 	SET      = []byte("SET")
 )
@@ -177,7 +178,11 @@ func handlePingCommand() (int, []byte) {
 	return 0, response
 }
 
-func handleReplConfCommand(args []any) (int, []byte) {
+func handlePsyncCommand(replicationId string) (int, []byte) {
+	return 2, resp.EncodeSimpleString(fmt.Sprintf("FULLRESYNC %s 0", replicationId))
+}
+
+func handleReplConfCommand() (int, []byte) {
 	response := resp.EncodeSimpleString("OK")
 
 	return 2, response
@@ -255,9 +260,6 @@ func (s *Server) executeCommand(command []byte, args []any) (int, []byte) {
 	case bytes.Equal(command, CONFIG):
 		return handleConfigCommand(s.config, args)
 
-	case bytes.Equal(command, PING):
-		return handlePingCommand()
-
 	case bytes.Equal(command, ECHO):
 		return handleEchoCommand(args)
 
@@ -270,8 +272,14 @@ func (s *Server) executeCommand(command []byte, args []any) (int, []byte) {
 	case bytes.Equal(command, KEYS):
 		return handleKeysCommand(s.cache, args)
 
+	case bytes.Equal(command, PING):
+		return handlePingCommand()
+
+	case bytes.Equal(command, PSYNC):
+		return handlePsyncCommand(s.replicationId)
+
 	case bytes.Equal(command, REPLCONF):
-		return handleReplConfCommand(args)
+		return handleReplConfCommand()
 
 	case bytes.Equal(command, SET):
 		return handleSetCommand(s.cache, args)
