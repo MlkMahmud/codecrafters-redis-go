@@ -20,7 +20,7 @@ var (
 	ErrSyntax = errors.New("syntax error")
 )
 
-func Parse(r *bufio.Reader) (any, error) {
+func Decode(r *bufio.Reader) (any, error) {
 	delim, err := r.Peek(1)
 
 	if errors.Is(err, io.EOF) {
@@ -35,23 +35,23 @@ func Parse(r *bufio.Reader) (any, error) {
 
 	switch prefix {
 	case arrayPrefix:
-		return parseArray(r)
+		return decodeArray(r)
 
 	case bulkStringPrefix:
-		return parseBulkString(r)
+		return decodeBulkString(r)
 
 	case integerPrefix:
-		return parseInteger(r)
+		return decodeInteger(r)
 
 	case simpleStringPrefix:
-		return parseSimpleString(r)
+		return decodeSimpleString(r)
 
 	default:
 		return nil, fmt.Errorf("%w: unsupported data type \"%c\"", ErrSyntax, prefix)
 	}
 }
 
-func parseArray(r *bufio.Reader) ([]any, error) {
+func decodeArray(r *bufio.Reader) ([]any, error) {
 	lengthLine, err := r.ReadBytes('\n')
 
 	if err != nil {
@@ -77,7 +77,7 @@ func parseArray(r *bufio.Reader) ([]any, error) {
 	arr := make([]any, length)
 
 	for i := range length {
-		data, err := Parse(r)
+		data, err := Decode(r)
 
 		if err != nil {
 			return nil, err
@@ -89,7 +89,7 @@ func parseArray(r *bufio.Reader) ([]any, error) {
 	return arr, nil
 }
 
-func parseBulkString(r *bufio.Reader) ([]byte, error) {
+func decodeBulkString(r *bufio.Reader) ([]byte, error) {
 	lengthLine, err := r.ReadBytes('\n')
 
 	if err != nil {
@@ -131,7 +131,7 @@ func parseBulkString(r *bufio.Reader) ([]byte, error) {
 	return dataLine, nil
 }
 
-func parseInteger(r *bufio.Reader) (int, error) {
+func decodeInteger(r *bufio.Reader) (int, error) {
 	dataLine, err := r.ReadBytes('\n')
 
 	if err != nil {
@@ -158,7 +158,7 @@ func parseInteger(r *bufio.Reader) (int, error) {
 	return num, nil
 }
 
-func parseSimpleString(r *bufio.Reader) ([]byte, error) {
+func decodeSimpleString(r *bufio.Reader) ([]byte, error) {
 	dataLine, err := r.ReadBytes('\n')
 
 	if err != nil {

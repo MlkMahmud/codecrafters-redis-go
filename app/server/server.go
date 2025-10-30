@@ -153,7 +153,7 @@ func (s *Server) handleIncomingConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 
 	for {
-		data, err := resp.Parse(reader)
+		data, err := resp.Decode(reader)
 
 		select {
 		case <-s.stoppedC:
